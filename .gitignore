@@ -1,0 +1,5 @@
+venv/
+.env
+*.pkl
+chat_history.db
+__pycache__/

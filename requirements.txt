@@ -1,0 +1,8 @@
+python-dotenv
+numpy
+google-generativeai
+psycopg2-binary
+requests
+python-telegram-bot[job-queue]
+ddgs
+pytz
