@@ -5,14 +5,14 @@ import google.generativeai as genai
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from ddgs import DDGS
-
 import datetime
 import pytz
-
+from dotenv import load_dotenv
 
 # Importar la base de datos de historial y nuestro nuevo Bibliotecario
 from database import init_db, save_message, get_history
 from bibliotecario import buscar_en_notas
+
 
 # Cargar variables de entorno
 load_dotenv()
