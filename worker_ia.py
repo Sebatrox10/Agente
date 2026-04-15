@@ -41,10 +41,13 @@ def vectorizar_texto(peticion: PeticionVector):
 
 @app.post("/extraer-pdf")
 async def extraer_pdf(file: UploadFile = File(...)):
-    """Extrae texto de un archivo PDF."""
-    contenido = await file.read()
-    doc = fitz.open(stream=contenido, filetype="pdf")
-    texto_completo = "".join([pagina.get_text() for pagina in doc])
+    contents = await file.read()
+    doc = fitz.open(stream=contents, filetype="pdf")
+    texto_completo = ""
+    for pagina in doc:
+        texto_completo += pagina.get_text()
+    
+    # Aquí podrías llamar a generar_respuesta con este texto
     return {"texto": texto_completo}
 
 @app.post("/investigar-arxiv")
