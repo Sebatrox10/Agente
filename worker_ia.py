@@ -5,7 +5,7 @@ import google.generativeai as genai
 import fitz
 import os
 from dotenv import load_dotenv
-from duckduckgo_search import DDGS
+
 import arxiv
 
 # Cargamos las variables del archivo .env que ya tienes
@@ -47,18 +47,10 @@ async def extraer_pdf(file: UploadFile = File(...)):
     texto_completo = "".join([pagina.get_text() for pagina in doc])
     return {"texto": texto_completo}
 
-def buscar_en_web(query: str):
-    """Busca en internet y devuelve un resumen de los mejores resultados."""
-    print(f"🌐 Buscando en la red sobre: {query}...")
-    with DDGS() as ddgs:
-        resultados = [r['body'] for r in ddgs.text(query, max_results=5)]
-    return "\n".join(resultados)
-
-def buscar_en_arxiv(query: str):
-    """Busca los 5 artículos más relevantes en ArXiv y extrae sus resúmenes."""
-    print(f"📚 Investigando en ArXiv sobre: {query}...")
+@app.post("/investigar-arxiv")
+async def investigar_arxiv(peticion: PeticionVector): 
     search = arxiv.Search(
-        query = query,
+        query = peticion.texto,
         max_results = 5,
         sort_by = arxiv.SortCriterion.Relevance
     )
@@ -67,11 +59,12 @@ def buscar_en_arxiv(query: str):
     for res in search.results():
         opciones.append({
             "titulo": res.title,
-            "resumen": res.summary[:500] + "...", # Un adelanto para que decidas
+            "resumen": res.summary[:500] + "...", 
             "url": res.pdf_url,
             "id_arxiv": res.entry_id.split('/')[-1]
         })
     return {"opciones": opciones}
+
 
 @app.post("/generar-respuesta")
 async def generar_respuesta(peticion: PeticionSintesis):

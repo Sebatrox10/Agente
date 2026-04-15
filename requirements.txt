@@ -6,3 +6,10 @@ requests
 python-telegram-bot[job-queue]
 ddgs
 pytz
+fastapi
+uvicorn
+pydantic
+sentence-transformers
+pymupdf
+arxiv
+python-multipart
