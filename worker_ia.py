@@ -55,20 +55,23 @@ def buscar_en_web(query: str):
     return "\n".join(resultados)
 
 def buscar_en_arxiv(query: str):
-    """Busca los 3 artículos más relevantes en ArXiv y extrae sus resúmenes."""
+    """Busca los 5 artículos más relevantes en ArXiv y extrae sus resúmenes."""
     print(f"📚 Investigando en ArXiv sobre: {query}...")
     search = arxiv.Search(
         query = query,
-        max_results = 3,
+        max_results = 5,
         sort_by = arxiv.SortCriterion.Relevance
     )
     
-    resultados_academicos = []
-    for result in search.results():
-        info = f"Título: {result.title}\nAutores: {result.authors}\nResumen: {result.summary}\nURL: {result.pdf_url}"
-        resultados_academicos.append(info)
-        
-    return "\n\n---\n\n".join(resultados_academicos)
+    opciones = []
+    for res in search.results():
+        opciones.append({
+            "titulo": res.title,
+            "resumen": res.summary[:500] + "...", # Un adelanto para que decidas
+            "url": res.pdf_url,
+            "id_arxiv": res.entry_id.split('/')[-1]
+        })
+    return {"opciones": opciones}
 
 @app.post("/generar-respuesta")
 async def generar_respuesta(peticion: PeticionSintesis):
@@ -90,14 +93,20 @@ async def generar_respuesta(peticion: PeticionSintesis):
 
     # 3. Generación final con "Sustento Científico"
     prompt_final = f"""
-    Eres Troxi, el Agente Académico de Sebastián.
-    Tu tarea es responder basándote en el contexto local y la investigación científica adjunta.
-    
-    {contexto_final}
-    
-    Pregunta: {peticion.pregunta}
-    
-    REGLA DE ORO: Si usaste información de ArXiv, menciona el título del artículo al final de la respuesta para que Sebastián pueda citarlo. Usa LaTeX para las fórmulas.
+    Eres Troxi, el Agente Académico de Sebastián. Tu tarea es crear una nota para Obsidian.
+
+    TEMA: {peticion.pregunta}
+    CONTEXTO: {contexto_final}
+
+    INSTRUCCIONES DE FORMATO:
+    1. Si se solicita un MENTEFACTO, usa bloques de código 'mermaid' tipo 'graph TD'.
+    2. Usa vínculos de Obsidian [[Concepto]] para términos importantes.
+    3. Si el concepto ya existe en el contexto, vincúlalo.
+    4. Estructura: 
+    # {peticion.pregunta}
+    - **Concepto Central**: ...
+    - **Mentefacto**: [Código Mermaid aquí]
+    - **Resumen Crítico**: ...
     """
     
     respuesta = model.generate_content(prompt_final)
