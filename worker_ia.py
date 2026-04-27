@@ -14,7 +14,7 @@ import arxiv
 load_dotenv()
 
 # 1. Configuración de Gemini
-genai.configure(api_key="AIzaSyD3ZWEg608EVge7g1qsmRovy_-jAcoqzMs")
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel('gemini-flash-latest') 
 
 # Inicializamos el modelo matemático que convierte texto a vectores
