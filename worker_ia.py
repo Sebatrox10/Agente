@@ -35,12 +35,67 @@ class PeticionVector(BaseModel):
 class PeticionSintesis(BaseModel):
     pregunta: str
     contexto: str
+    formato_cita: str = "APA 7"
 
 class PeticionEdicion(BaseModel):
     contenido: str
     instruccion: str
 
+class PeticionTextoCompleto(BaseModel):
+    texto: str
+    url_origen: str
+
 # --- ENDPOINTS ---
+
+@app.post("/extraer-texto")
+async def extraer_texto(peticion: PeticionTextoCompleto):
+    # Usamos un prompt casi idéntico al del PDF, pero adaptado para web
+    prompt_analisis = f"""
+    Eres un asistente académico avanzado. Analiza el siguiente texto extraído de la web ({peticion.url_origen}).
+    
+    1. TEMA: Identifica el tema principal en 1 a 3 palabras. Usa guiones bajos.
+    2. RESUMEN: Escribe los 3 a 5 puntos más importantes en una sola cadena de texto usando Markdown.
+    3. METADATOS: Extrae el título original, el autor (si se menciona) y el año de publicación. Si no los encuentras, usa "Desconocido" o "s.f.".
+
+    Devuelve tu respuesta ESTRICTAMENTE en formato JSON con la siguiente estructura exacta:
+    {{
+      "tema": "Tema_Detectado",
+      "resumen": "- Punto 1\\n- Punto 2...",
+      "metadata": {{
+        "titulo": "Título de la web",
+        "autor": "Autor",
+        "anio": "2026"
+      }}
+    }}
+
+    TEXTO WEB (Extracto):
+    {peticion.texto[:15000]} 
+    """
+    
+    try:
+        respuesta_llm = model.generate_content(prompt_analisis).text
+        respuesta_limpia = respuesta_llm.replace("```json", "").replace("```", "").strip()
+        datos_ia = json.loads(respuesta_limpia)
+        
+        tema_detectado = datos_ia.get("tema", "Investigacion_Web")
+        resumen_bruto = datos_ia.get("resumen", "No se pudo generar el resumen.")
+        metadata = datos_ia.get("metadata", {"titulo": peticion.url_origen, "autor": "Desconocido", "anio": "s.f."})
+
+        if isinstance(resumen_bruto, list):
+            resumen_inteligente = "\n- ".join(str(item) for item in resumen_bruto)
+            resumen_inteligente = "- " + resumen_inteligente
+        else:
+            resumen_inteligente = str(resumen_bruto)
+
+    except Exception as e:
+        return {"error": str(e)}
+
+    return {
+        "texto": peticion.texto,
+        "tema": str(tema_detectado).replace(" ", "_"),
+        "resumen": resumen_inteligente,
+        "metadata": metadata
+    }
 
 # 1. RECIBIR Y LEER PDF (Para tus clases)
 @app.post("/extraer-pdf")
@@ -51,17 +106,27 @@ async def extraer_pdf(file: UploadFile = File(...)):
     for pagina in doc:
         texto_completo += pagina.get_text()
 
-    # Le pedimos a Gemini que haga el trabajo duro
+    # NUEVO PROMPT: Le pedimos los metadatos explícitamente
     prompt_analisis = f"""
-    Eres un asistente académico. Analiza el siguiente texto de un documento universitario.
-    1. Identifica el TEMA PRINCIPAL en 1 a 3 palabras (ej. "Logica_Matematica", "Machine_Learning"). Usa guiones bajos en vez de espacios.
-    2. Escribe un RESUMEN INTELIGENTE con los 3 a 5 puntos o descubrimientos más importantes.
+    Eres un asistente académico avanzado. Analiza el siguiente texto de un documento universitario o paper científico.
+    
+    1. TEMA: Identifica el tema principal en 1 a 3 palabras (ej. "Machine_Learning"). Usa guiones bajos.
+    2. RESUMEN: Escribe los 3 a 5 puntos más importantes en una sola cadena de texto usando Markdown.
+    3. METADATOS: Extrae el título original, el autor (o autores) y el año de publicación. Si no los encuentras, usa "Desconocido" o "s.f.".
 
-    Devuelve tu respuesta ESTRICTAMENTE en formato JSON, con las claves "tema" y "resumen". 
-    IMPORTANTE: El valor de "resumen" DEBE SER UNA SOLA CADENA DE TEXTO (String) usando Markdown, NO un array ni una lista.
+    Devuelve tu respuesta ESTRICTAMENTE en formato JSON con la siguiente estructura exacta:
+    {{
+      "tema": "Tema_Detectado",
+      "resumen": "- Punto 1\\n- Punto 2...",
+      "metadata": {{
+        "titulo": "Título del documento",
+        "autor": "Nombre del Autor",
+        "anio": "2024"
+      }}
+    }}
 
-    TEXTO DEL DOCUMENTO (Extracto):
-    {texto_completo[:60000]} 
+    TEXTO DEL DOCUMENTO (Extracto inicial para metadatos):
+    {texto_completo[:15000]} 
     """
     
     try:
@@ -71,22 +136,24 @@ async def extraer_pdf(file: UploadFile = File(...)):
         
         tema_detectado = datos_ia.get("tema", "Investigaciones_Varias")
         resumen_bruto = datos_ia.get("resumen", "No se pudo generar el resumen.")
+        metadata = datos_ia.get("metadata", {"titulo": "Desconocido", "autor": "Desconocido", "anio": "s.f."})
 
-        # ¡EL ESCUDO! Si Gemini desobedece y manda una lista, la convertimos a texto
         if isinstance(resumen_bruto, list):
             resumen_inteligente = "\n- ".join(str(item) for item in resumen_bruto)
-            resumen_inteligente = "- " + resumen_inteligente # Añade viñeta al primero
+            resumen_inteligente = "- " + resumen_inteligente
         else:
             resumen_inteligente = str(resumen_bruto)
 
     except Exception as e:
         tema_detectado = "Clasificacion_Pendiente"
-        resumen_inteligente = "Hubo un problema al pedirle el resumen a la IA: " + str(e)
+        resumen_inteligente = "Hubo un problema de IA: " + str(e)
+        metadata = {"titulo": "Desconocido", "autor": "Desconocido", "anio": "s.f."}
 
     return {
         "texto": texto_completo,
-        "tema": str(tema_detectado).replace(" ", "_"), # Forzamos que no tenga espacios para la carpeta
-        "resumen": resumen_inteligente
+        "tema": str(tema_detectado).replace(" ", "_"),
+        "resumen": resumen_inteligente,
+        "metadata": metadata # ¡Enviamos el JSON anidado a Java!
     }
 
 # 2. VECTORIZAR TEXTO (Para guardar en PostgreSQL)
@@ -118,22 +185,28 @@ async def investigar_arxiv(peticion: PeticionVector):
 @app.post("/generar-respuesta")
 async def generar_respuesta(peticion: PeticionSintesis):
     prompt_sistema = f"""
-    Eres Troxi, el asistente personal académico e investigador del usuario.
+    Eres Troxi, un Agente de Investigación Académica de nivel universitario.
 
-    CONTEXTO DE LA BASE DE DATOS (Trozos de PDFs): 
+    CONTEXTO DE LA BASE DE DATOS (Trozos de documentos etiquetados): 
     {peticion.contexto}
 
     REGLAS DE COMPORTAMIENTO:
-    1. CHARLA CASUAL: Si el usuario te saluda o hace charla normal, responde con naturalidad.
-    2. RESPONDER PREGUNTAS: Si el usuario hace una pregunta, utiliza PRINCIPALMENTE el CONTEXTO DE LA BASE DE DATOS para responder.
-    3. IGNORANCIA HONESTA: Si la respuesta no está en el CONTEXTO, no la inventes. Dile al usuario que no lo sabes y sugiérele usar el comando /arxiv.
-    4. FORMATO OBLIGATORIO: ESTÁ ESTRICTAMENTE PROHIBIDO usar sintaxis LaTeX (símbolos $ o $$). Debes escribir toda la matemática, lógica y símbolos usando caracteres Unicode normales (ej. p ∨ q, p → q, ¬p) para que se rendericen correctamente en Telegram.
+    1. CITA RIGUROSA: Utiliza la información de las fuentes proporcionadas para responder. CITA SIEMPRE en formato {peticion.formato_cita}.
+    2. BIBLIOGRAFÍA: Al final genera una sección "### Referencias".
+    3. IGNORANCIA HONESTA: Si no sabes, no lo inventes.
+    4. SINTAXIS: Prohibido LaTeX ($ o $$). Usa Unicode normal.
 
     MENSAJE DEL USUARIO: 
     {peticion.pregunta}
     """
-    respuesta_final = model.generate_content(prompt_sistema).text.strip()
-    return {"respuesta": respuesta_final}
+    
+    # --- ESCUDO PARA LA IA ---
+    try:
+        respuesta_final = model.generate_content(prompt_sistema).text.strip()
+        return {"respuesta": respuesta_final}
+    except Exception as e:
+        # En lugar de colapsar, le avisamos amablemente a Java y a Telegram
+        return {"respuesta": f"⚠️ Mi cerebro (Gemini) tuvo un bloqueo al pensar la respuesta: {str(e)}"}
 
 
 @app.post("/editar-documento")
