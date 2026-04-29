@@ -15,7 +15,7 @@ load_dotenv()
 
 # 1. Configuración de Gemini
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel('gemini-flash-latest') 
+model = genai.GenerativeModel('gemini-2.5-flash') 
 
 # Inicializamos el modelo matemático que convierte texto a vectores
 embedder = SentenceTransformer('all-MiniLM-L6-v2')

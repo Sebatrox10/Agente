@@ -52,7 +52,7 @@ instrucciones_base = f"Eres mi agente personal. El día de hoy es {fecha_hoy}. U
 # 3. Configurar el modelo con el calendario incluido
 tools = [buscar_en_internet, consultar_mis_notas]
 model = genai.GenerativeModel(
-    model_name='gemini-flash-latest',
+    model_name='gemini-2.5-flash',
     tools=tools,
     system_instruction=instrucciones_base
 )
